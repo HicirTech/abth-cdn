@@ -121,4 +121,6 @@ jobs:
             exit 0
           fi
           git commit -m "Record ESE ${{ steps.ese.outputs.commit }}"
+          # main may have moved while the charts were drawn: the manifest goes on top of it.
+          git pull --rebase origin main
           git push
