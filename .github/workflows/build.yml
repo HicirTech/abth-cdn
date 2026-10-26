@@ -1,0 +1,124 @@
+name: Build
+
+# Every hour: when ESE's charts moved, draw them again and publish the drawings and the note counts.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Draw every chart again, though ESE has not moved
+        type: boolean
+        default: false
+      app_ref:
+        description: The branch of A Better Taiko Hiroba to draw with
+        type: string
+        default: main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: See whether ESE moved
+        id: ese
+        run: |
+          commit=$(git ls-remote https://ese.tjadataba.se/ESE/ESE.git refs/heads/master | cut -f1)
+          if [ -z "$commit" ]; then
+            echo "ESE did not answer"
+            exit 1
+          fi
+          built=$(jq -r '.ese // ""' manifest.json 2>/dev/null || true)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          if [ "$commit" = "$built" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+            echo "ESE is still at $commit"
+          else
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the app, whose code draws the charts
+        if: steps.ese.outputs.moved == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: HicirTech/A-Better-Taiko-Hiroba
+          # A scheduled run has no inputs, and draws with main.
+          ref: ${{ inputs.app_ref || 'main' }}
+          path: abth
+
+      - if: steps.ese.outputs.moved == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install the app's tools
+        if: steps.ese.outputs.moved == 'true'
+        working-directory: abth
+        run: bun install --frozen-lockfile
+
+      - name: Install Japanese fonts and a display for the drawing window
+        if: steps.ese.outputs.moved == 'true'
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk xvfb
+
+      # ESE keeps its songs' audio in Git LFS: skipping it leaves only the charts, about 8 MB.
+      - name: Clone ESE's charts, without the audio
+        if: steps.ese.outputs.moved == 'true'
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: git clone --depth 1 -b master https://ese.tjadataba.se/ESE/ESE.git "$RUNNER_TEMP/ese"
+
+      - name: Read OurTaiko's map of songs to charts
+        if: steps.ese.outputs.moved == 'true'
+        run: curl -fsS https://cdn.ourtaiko.org/api/ese_mapping -o "$RUNNER_TEMP/ese_mapping.json"
+
+      - name: Draw the charts and count their notes
+        if: steps.ese.outputs.moved == 'true'
+        working-directory: abth
+        run: >
+          xvfb-run -a bun gui/scripts/abth-cdn/build.ts
+          --ese "$RUNNER_TEMP/ese"
+          --map "$RUNNER_TEMP/ese_mapping.json"
+          --out "$RUNNER_TEMP/site"
+          --commit "${{ steps.ese.outputs.commit }}"
+
+      # No chart file outlives the job, whatever became of the drawing.
+      - name: Delete the clone
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ese"
+
+      - if: steps.ese.outputs.moved == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+      - id: deploy
+        if: steps.ese.outputs.moved == 'true'
+        uses: actions/deploy-pages@v5
+
+      # A committed manifest records the commit drawn, and keeps the hourly schedule alive.
+      - name: Keep the manifest
+        if: steps.ese.outputs.moved == 'true'
+        run: |
+          cp "$RUNNER_TEMP/site/manifest.json" manifest.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Record ESE ${{ steps.ese.outputs.commit }}"
+          git push
