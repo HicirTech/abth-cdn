@@ -1,9 +1,9 @@
 name: Build
 
-# Every hour: when ESE's charts moved, draw them again and publish the drawings and the note counts.
+# Every three hours: when ESE's charts moved, draw them again and publish the drawings and counts.
 on:
   schedule:
-    - cron: "23 * * * *"
+    - cron: "23 */3 * * *"
   workflow_dispatch:
     inputs:
       force:

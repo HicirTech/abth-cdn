@@ -12,7 +12,7 @@ No chart file is kept here, and none is published: the build reads ESE's charts,
 
 ## How it is built
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) runs every hour. It asks ESE whether its `master` branch moved, and only then clones it without the audio ESE keeps in Git LFS, reads OurTaiko's map of songs to charts (`cdn.ourtaiko.org`), and runs the app's own [`gui/scripts/abth-cdn/build.ts`](https://github.com/HicirTech/A-Better-Taiko-Hiroba/blob/main/gui/scripts/abth-cdn/build.ts). It then deletes the clone, publishes the site, and commits `manifest.json`. Run it by hand from the Actions tab: `force` draws everything again, and `app_ref` names another branch of the app to draw with.
+[`.github/workflows/build.yml`](.github/workflows/build.yml) runs every three hours. It asks ESE whether its `master` branch moved, and only then clones it without the audio ESE keeps in Git LFS, reads OurTaiko's map of songs to charts (`cdn.ourtaiko.org`), and runs the app's own [`gui/scripts/abth-cdn/build.ts`](https://github.com/HicirTech/A-Better-Taiko-Hiroba/blob/main/gui/scripts/abth-cdn/build.ts). It then deletes the clone, publishes the site, and commits `manifest.json`. Run it by hand from the Actions tab: `force` draws everything again, and `app_ref` names another branch of the app to draw with.
 
 ## Credits
 
